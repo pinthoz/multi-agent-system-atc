@@ -190,9 +190,6 @@ async def main():
 
     await atc_agent.start()
     await aircraft_agent.start()
-    
-
-
 
 
 if __name__ == "__main__":
