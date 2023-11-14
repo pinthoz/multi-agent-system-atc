@@ -108,7 +108,7 @@ class RunwayManagerAgent(Agent):
     async def setup(self):
         class RunwayAvailable(CyclicBehaviour):
             async def run(self):
-                print("RunwayAvailableInteraction behavior is running")
+                #print("RunwayAvailableInteraction behavior is running")
                 msg = await self.receive()
                 if msg:
                     if msg.metadata["performative"] == "propose":
@@ -162,7 +162,7 @@ class AircraftAgent(Agent):
         # Define a behavior to interact with the environment and air traffic control
         class AircraftInteraction(CyclicBehaviour):
             async def run(self):
-                print("AircraftInteraction behavior is running")
+                #print("AircraftInteraction behavior is running")
                 # Perceive environment data
                 aircraft_position = self.get_aircraft_position(self.agent.aircraft_id)
                 
@@ -177,11 +177,7 @@ class AircraftAgent(Agent):
                     msg.body = f"Some runway available?"
                     
                     await self.send(msg)
-                    msg2 = await self.receive()
-                    print(msg2)
-                    
-                    if "is available" in msg2.body:
-                        self.agent.reached_destination = True
+
                     
                     
                 if not self.agent.reached_destination:
@@ -239,11 +235,26 @@ class AircraftAgent(Agent):
                 # Send the message
                 await self.send(msg)
                 
-            
+        class MessageHandling(CyclicBehaviour):
+            async def run(self):
+                msg = await self.receive()
+                if msg:
+                    if "is available" in msg.body:
+                        self.agent.reached_destination = True
+                        
+                        
+                    print(f"Hi! {msg.to} received message: {msg.body} from {msg.sender}\n")
+                    
+                    # Handle the message here, e.g., provide instructions to the aircraft
+
+                    
+                    
+                        
         
 
         # Add the behavior to the agent
         self.add_behaviour(AircraftInteraction())
+        self.add_behaviour(MessageHandling())
     
         
 
