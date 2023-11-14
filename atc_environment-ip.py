@@ -7,17 +7,17 @@ import asyncio
 import spade
 import math
 from geopy.distance import geodesic
+import random
+import re
 
 
 
-
-# Define the Environment class to represent the air traffic control environment
 class Environment:
     def __init__(self):
         # Initialize environment variables, e.g., aircraft positions, weather, runways, etc.
         self.aircraft_positions = {100 : (41.23556,-8.67806,0)} # {aircraft_id: position-> (x, y, z)}
         self.weather_conditions = {} # {weather_data}
-        self.runway_status = {1 : 1, 2:0} # {runway_id: status -> 0/1}
+        self.runway_status = {1 : 0, 2:1} # {runway_id: status -> 0/1}
 
     def update_aircraft_position(self, aircraft_id, position):
         self.aircraft_positions[aircraft_id] = position
@@ -49,8 +49,14 @@ class Environment:
             return None
     
     def get_runway_id(self):
-        # Retrieve one of runway id from the environment
-        return 1
+        # Retrieve one of runway id from the environment with status 1
+        runway_ids = [runway_id for runway_id, status in self.runway_status.items() if status == 1]
+        if runway_ids:
+            return random.choice(runway_ids)
+        else:
+            print("No runway available.")
+            return None
+
 
 
 class AirTrafficControlAgent(Agent):
@@ -134,19 +140,6 @@ class RunwayManagerAgent(Agent):
                 status = self.agent.environment.get_runway_status(runway_id)
                 return status
             
-            async def send_instruction_to_aircraft(self, position):
-                # Create an ACL message to send data to the air traffic control agent   
-                msg = Message(to="atc_agent@localhost")  # Replace with the correct ATC agent JID
-                msg.set_metadata("performative", "inform")
-                msg.body = f"Aircraft {self.agent.aircraft_id} at position {position} requesting instructions.\nDistance to destination: {round(distance)} meters."
-                
-                if self.agent.reached_destination:
-                    new_position = (position[0], position[1], 0)
-                    msg.body = f"Aircraft {self.agent.aircraft_id} reached destination.{new_position}"
-
-
-                # Send the message
-                await self.send(msg)
         
         self.add_behaviour(RunwayAvailable())
 
@@ -171,13 +164,15 @@ class AircraftAgent(Agent):
                 
                 distance_to_destination = geodesic((new_position[0], new_position[1]), (38.77944, -9.13611)).meters
                 
-                if distance_to_destination <= 1000:
+                
+                if distance_to_destination <= 1000 :
                     #request runway availability
-                    msg = Message(to="runway_agent@localhost")
-                    msg.set_metadata("performative", "propose")
-                    msg.body = f"Some runway available?"
-                    
-                    await self.send(msg)
+                    if not self.agent.reached_destination:
+                        msg = Message(to="runway_agent@localhost")
+                        msg.set_metadata("performative", "propose")
+                        msg.body = f"Some runway available?"
+                        
+                        await self.send(msg)
                     
                     
                 if not self.agent.reached_destination:
@@ -186,7 +181,9 @@ class AircraftAgent(Agent):
                     # Comunica com o controle de tráfego aéreo
                     await self.send_instruction_to_atc(aircraft_position, distance_to_destination)
                 else:
+                    await self.land_aircraft()
                     new_position
+                    print(self.agent.environment.runway_status)
                     await self.send_instruction_to_atc(aircraft_position, 0)
                     # Aguarda o sinalizador para o início de uma nova rota
                     await self.agent.new_route_event.wait()
@@ -195,8 +192,7 @@ class AircraftAgent(Agent):
                     self.agent.new_route_event.clear()
                 
                 
-                if self.agent.reached_destination:
-                    await self.land_aircraft()
+
                     
 
             def get_aircraft_position(self, aircraft_id):
@@ -237,7 +233,7 @@ class AircraftAgent(Agent):
                 
                 if self.agent.reached_destination:
                     new_position = (position[0], position[1], 0)
-                    msg.body = f"Aircraft {self.agent.aircraft_id} reached destination.{new_position}"
+                    msg.body = f"Aircraft {self.agent.aircraft_id} reached destination at runway {self.agent.runway_id} in {new_position}"
 
 
                 # Send the message
@@ -261,12 +257,17 @@ class AircraftAgent(Agent):
                 msg = await self.receive()
                 if msg:
                     if "is available" in msg.body:
+                        # Extrai a runway_id da mensagem e atualiza o valor no agente de aeronaves
+                        runway_id = int(re.search(r'\d+', msg.body).group())
+                        self.agent.runway_id = runway_id
                         self.agent.reached_destination = True
+                        
                     elif "new route started" in msg.body:
                         # Sinaliza o evento de início de uma nova rota
                         self.agent.new_route_event.set()
-                        
+
                     print(f"Hi! {msg.to} received message: {msg.body} from {msg.sender}\n")
+
                     
 
 
