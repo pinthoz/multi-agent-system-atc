@@ -189,7 +189,10 @@ class AircraftAgent(Agent):
                     new_position
                     await self.send_instruction_to_atc(aircraft_position, 0)
                     await asyncio.sleep(5)
-                    
+                
+                
+                if self.agent.reached_destination and self.agent.reached_destination:
+                    await self.land_aircraft()
 
             def get_aircraft_position(self, aircraft_id):
                 # Access the environment object to retrieve the aircraft's position
@@ -234,6 +237,20 @@ class AircraftAgent(Agent):
 
                 # Send the message
                 await self.send(msg)
+             
+            
+            async def land_aircraft(self):
+                # Set the aircraft position to the ground level
+                #new_position = (position[0], position[1], 0)
+                #self.agent.environment.update_aircraft_position(self.agent.aircraft_id, new_position)
+
+                # Update the runway status in the environment (mark it as not available)
+                self.agent.environment.update_runway_status(self.agent.runway_id, 0)
+
+                # Notify the air traffic control about the landing
+                #await self.send_instruction_to_atc(new_position, 0)  
+                
+                
                 
         class MessageHandling(CyclicBehaviour):
             async def run(self):
