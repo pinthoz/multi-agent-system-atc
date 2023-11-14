@@ -134,7 +134,7 @@ class RunwayManagerAgent(Agent):
                 status = self.agent.environment.get_runway_status(runway_id)
                 return status
             
-            async def send_instruction_to_aircraft(self, ):
+            async def send_instruction_to_aircraft(self, position):
                 # Create an ACL message to send data to the air traffic control agent   
                 msg = Message(to="atc_agent@localhost")  # Replace with the correct ATC agent JID
                 msg.set_metadata("performative", "inform")
@@ -157,6 +157,7 @@ class AircraftAgent(Agent):
         self.aircraft_id = aircraft_id
         self.runway_id = runway_id
         self.reached_destination = False
+        self.new_route_event = asyncio.Event()
 
     async def setup(self):
         # Define a behavior to interact with the environment and air traffic control
@@ -166,7 +167,7 @@ class AircraftAgent(Agent):
                 # Perceive environment data
                 aircraft_position = self.get_aircraft_position(self.agent.aircraft_id)
                 
-                new_position = self.move_towards(aircraft_position, (38.77944,-9.13611,0), 800, 50)
+                new_position = self.move_towards(aircraft_position, (38.77944,-9.13611,0), 800, 20)
                 
                 distance_to_destination = geodesic((new_position[0], new_position[1]), (38.77944, -9.13611)).meters
                 
@@ -177,7 +178,6 @@ class AircraftAgent(Agent):
                     msg.body = f"Some runway available?"
                     
                     await self.send(msg)
-
                     
                     
                 if not self.agent.reached_destination:
@@ -188,11 +188,16 @@ class AircraftAgent(Agent):
                 else:
                     new_position
                     await self.send_instruction_to_atc(aircraft_position, 0)
-                    await asyncio.sleep(5)
+                    # Aguarda o sinalizador para o início de uma nova rota
+                    await self.agent.new_route_event.wait()
+
+                    # Limpa o sinalizador para que possa ser usado novamente
+                    self.agent.new_route_event.clear()
                 
                 
-                if self.agent.reached_destination and self.agent.reached_destination:
+                if self.agent.reached_destination:
                     await self.land_aircraft()
+                    
 
             def get_aircraft_position(self, aircraft_id):
                 # Access the environment object to retrieve the aircraft's position
@@ -237,7 +242,6 @@ class AircraftAgent(Agent):
 
                 # Send the message
                 await self.send(msg)
-             
             
             async def land_aircraft(self):
                 # Set the aircraft position to the ground level
@@ -258,16 +262,13 @@ class AircraftAgent(Agent):
                 if msg:
                     if "is available" in msg.body:
                         self.agent.reached_destination = True
-                        
+                    elif "new route started" in msg.body:
+                        # Sinaliza o evento de início de uma nova rota
+                        self.agent.new_route_event.set()
                         
                     print(f"Hi! {msg.to} received message: {msg.body} from {msg.sender}\n")
                     
-                    # Handle the message here, e.g., provide instructions to the aircraft
 
-                    
-                    
-                        
-        
 
         # Add the behavior to the agent
         self.add_behaviour(AircraftInteraction())
@@ -301,3 +302,15 @@ if __name__ == "__main__":
         addBehaviour(SetNewAirwayBehavior.create(aircraft, description));
         addBehaviour(LocationTickerBehavior.create(this, aircraft, 1000));
         addBehaviour(AdjustAltitudeBehavior.create(aircraft));"""
+        
+"""Request (request): Used to make a request, asking the receiver to perform some action or provide some information.
+
+Inform (inform): Used to convey information from the sender to the receiver.
+
+Propose (propose): Used to suggest something or make a proposal.
+
+Query (query): Used to ask a question or query for information.
+
+Subscribe (subscribe): Used to subscribe to a particular event or information.
+
+Refuse (refuse): Used to refuse a request or decline a proposal."""
