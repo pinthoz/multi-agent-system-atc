@@ -12,12 +12,14 @@ import re
 
 
 
+
 class Environment:
     def __init__(self):
         # Initialize environment variables, e.g., aircraft positions, weather, runways, etc.
         self.aircraft_positions = {100 : (41.23556,-8.67806,0)} # {aircraft_id: position-> (x, y, z)}
         self.weather_conditions = {} # {weather_data}
-        self.runway_status = {1 : 0, 2:1} # {runway_id: status -> 0/1}
+        self.runway_status = {1 : 0, 2 : 1} # {runway_id: status -> 0/1}
+        self.aeroports = {1 : (38.77944,-9.13611,0), 2 : (41.23556,-8.67806,0), 3 : (39.5, -8.0, 0)}
 
     def update_aircraft_position(self, aircraft_id, position):
         self.aircraft_positions[aircraft_id] = position
@@ -66,11 +68,11 @@ class AirTrafficControlAgent(Agent):
         self.aircraft_id = aircraft_id
 
 
+
     async def setup(self):
         # Define a behavior to perceive and interact with the environment
         class EnvironmentInteraction(CyclicBehaviour):
             async def run(self):
-
                 # Perceive environment data - you can use ACL messages or other means
                 aircraft_position = self.get_aircraft_position()
                 weather_data = self.get_weather_data()
@@ -89,13 +91,15 @@ class AirTrafficControlAgent(Agent):
                 return weather_data
             
 
-
-
         # Add the behavior to the agent
         class MessageHandling(CyclicBehaviour):
             async def run(self):
                 msg = await self.receive()
                 if msg:
+                    position_match = re.search(r'\((-?\d+\.\d+), (-?\d+\.\d+), (-?\d+)\)', msg.body)
+                    if position_match:
+                        x, y, z = map(float, position_match.groups())
+                        self.agent.environment.aircraft_positions[self.agent.aircraft_id] = (x, y, z)
                     print(f"Hi! {msg.to} received message: {msg.body} from {msg.sender}\n")
                     # Handle the message here, e.g., provide instructions to the aircraft
         
@@ -142,6 +146,8 @@ class RunwayManagerAgent(Agent):
             
         
         self.add_behaviour(RunwayAvailable())
+        
+
 
 class AircraftAgent(Agent):
     def __init__(self, jid, password, environment, aircraft_id, runway_id):
@@ -268,20 +274,33 @@ class AircraftAgent(Agent):
 
                     print(f"Hi! {msg.to} received message: {msg.body} from {msg.sender}\n")
 
+        
+        class AnyProblem(CyclicBehaviour):
+            haveProblem = random.randint(0, 5)
+            if haveProblem == 5:
+                async def run(self):
+                    #print("Aircraft have a problem")
+                    # Create an ACL message to send data to the air traffic control agent   
+                    msg = Message(to="atc_agent@localhost")
+                    msg.set_metadata("performative", "inform")
+                    msg.body = f"Aircraft {self.agent.aircraft_id} have a problem."
+                    # Send the message
+                    await self.send(msg)
                     
-
 
         # Add the behavior to the agent
         self.add_behaviour(AircraftInteraction())
         self.add_behaviour(MessageHandling())
-    
+        self.add_behaviour(AnyProblem())
+        # continuar a implementação do comportamento de interação com o atc
         
 
 async def main():
     # Create and initialize the environment
     atc_environment = Environment()
+    
     atc_agent = AirTrafficControlAgent("atc_agent@localhost", "1234", atc_environment, 100)
-
+    
     aircraft_agent = AircraftAgent("aircraft_agent@localhost", "1234", atc_environment, 100, 1)
     
     runway_agent = RunwayManagerAgent("runway_agent@localhost", "1234", atc_environment)
