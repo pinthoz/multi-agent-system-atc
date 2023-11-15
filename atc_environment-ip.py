@@ -16,9 +16,9 @@ import re
 class Environment:
     def __init__(self):
         # Initialize environment variables, e.g., aircraft positions, weather, runways, etc.
-        self.aircraft_positions = {100 : (41.23556,-8.67806,0)} # {aircraft_id: position-> (x, y, z)}
+        self.aircraft_positions = {100 : (41.23556,-8.67806,0), 200 : (38.77944,-9.13611,0)} # {aircraft_id: position-> (x, y, z)}
         self.weather_conditions = {} # {weather_data}
-        self.runway_status = {1 : 0, 2 : 1} # {runway_id: status -> 0/1}
+        self.runway_status = {1 : 0, 2 : 0} # {runway_id: status -> 0/1}
         self.aeroports = {1 : (38.77944,-9.13611,0), 2 : (41.23556,-8.67806,0), 3 : (39.5, -8.0, 0)}
 
     def update_aircraft_position(self, aircraft_id, position):
@@ -57,6 +57,13 @@ class Environment:
             return random.choice(runway_ids)
         else:
             print("No runway available.")
+            return None
+    
+    def get_airport_coord(self,runway_id):
+        if runway_id in self.aeroports:
+            return self.aeroports[runway_id]
+        else:
+            print(f"Runway {runway_id} not found.")
             return None
 
 
@@ -125,15 +132,17 @@ class RunwayManagerAgent(Agent):
                         # Handle the runway request message
                         print(f"Received runway request: {msg.body} from {msg.sender}")
                         runwayIsAvailable = self.get_runway_status(self.agent.environment.get_runway_id())
+                        
                         if runwayIsAvailable:
-                            # Create an ACL message to send data to the air traffic control agent   
-                            msg = Message(to="aircraft_agent@localhost")
+                            
+                            # Create an ACL message to send data to the air traffic control agent   s
+                            msg = Message(to=str(msg.sender))
                             msg.set_metadata("performative", "inform")
                             msg.body = f"Runway {self.agent.runway_id} is available."
                             # Send the message
                             await self.send(msg)
                         else:
-                            msg = Message(to="aircraft_agent@localhost")
+                            msg = Message(to=str(msg.sender))
                             msg.set_metadata("performative", "inform")
                             msg.body = f"Runway {self.agent.runway_id} is not available."
                             # Send the message
@@ -157,6 +166,9 @@ class AircraftAgent(Agent):
         self.runway_id = runway_id
         self.reached_destination = False
         self.new_route_event = asyncio.Event()
+        self.aircraft_position = self.environment.get_aircraft_position(self.aircraft_id)
+        self.destination = self.environment.get_airport_coord(self.runway_id)
+
 
     async def setup(self):
         # Define a behavior to interact with the environment and air traffic control
@@ -164,11 +176,11 @@ class AircraftAgent(Agent):
             async def run(self):
                 #print("AircraftInteraction behavior is running")
                 # Perceive environment data
-                aircraft_position = self.get_aircraft_position(self.agent.aircraft_id)
+                self.agent.aircraft_position = self.get_aircraft_position(self.agent.aircraft_id)
                 
-                new_position = self.move_towards(aircraft_position, (38.77944,-9.13611,0), 800, 20)
+                new_position = self.move_towards(self.agent.aircraft_position, self.agent.destination, 800, 20)
                 
-                distance_to_destination = geodesic((new_position[0], new_position[1]), (38.77944, -9.13611)).meters
+                distance_to_destination = geodesic((new_position[0], new_position[1]), (self.agent.destination[0], self.agent.destination[1])).meters
                 
                 
                 if distance_to_destination <= 1000 :
@@ -185,12 +197,11 @@ class AircraftAgent(Agent):
                     # Atualiza a posição da aeronave
                     self.agent.environment.update_aircraft_position(100, new_position)  
                     # Comunica com o controle de tráfego aéreo
-                    await self.send_instruction_to_atc(aircraft_position, distance_to_destination)
+                    await self.send_instruction_to_atc(self.agent.aircraft_position, distance_to_destination)
                 else:
                     await self.land_aircraft()
-                    new_position
                     print(self.agent.environment.runway_status)
-                    await self.send_instruction_to_atc(aircraft_position, 0)
+                    await self.send_instruction_to_atc(self.agent.aircraft_position, 0)
                     # Aguarda o sinalizador para o início de uma nova rota
                     await self.agent.new_route_event.wait()
 
@@ -274,7 +285,7 @@ class AircraftAgent(Agent):
 
                     print(f"Hi! {msg.to} received message: {msg.body} from {msg.sender}\n")
 
-        
+        '''
         class AnyProblem(CyclicBehaviour):
             haveProblem = random.randint(0, 5)
             if haveProblem == 5:
@@ -287,11 +298,11 @@ class AircraftAgent(Agent):
                     # Send the message
                     await self.send(msg)
                     
-
+    '''
         # Add the behavior to the agent
         self.add_behaviour(AircraftInteraction())
         self.add_behaviour(MessageHandling())
-        self.add_behaviour(AnyProblem())
+        #self.add_behaviour(AnyProblem())
         # continuar a implementação do comportamento de interação com o atc
         
 
@@ -302,13 +313,15 @@ async def main():
     atc_agent = AirTrafficControlAgent("atc_agent@localhost", "1234", atc_environment, 100)
     
     aircraft_agent = AircraftAgent("aircraft_agent@localhost", "1234", atc_environment, 100, 1)
-    
+    #aircraft_agent_2 = AircraftAgent("aircraft2@localhost", "aviao", atc_environment, 200, 2)
     runway_agent = RunwayManagerAgent("runway_agent@localhost", "1234", atc_environment)
 
-    await atc_agent.start()
-    await aircraft_agent.start()
-    await runway_agent.start()
-
+    await asyncio.gather(
+        atc_agent.start(),
+        aircraft_agent.start(),
+        #aircraft_agent_2.start(),
+        runway_agent.start()
+    )
 
 
 if __name__ == "__main__":
