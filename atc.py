@@ -18,8 +18,8 @@ class Environment:
         # Initialize environment variables, e.g., aircraft positions, weather, runways, etc.
         self.aircraft_positions = {100 : (41.23556,-8.67806,0), 200 : (42,-8,0)} # {aircraft_id: position-> (x, y, z)}
         self.weather_conditions = {} # {weather_data}
-        self.runway_status = {1 : 0, 2 : 1} # {runway_id: status -> 0/1}
-        self.aeroports = {1 : (42,-8,0), 2 : (41.23556,-8.67806,0), 3 : (39.5, -8.0, 0)}
+        self.runway_status = {1 : 1, 2 : 1} # {runway_id: status -> 0/1}
+        self.aeroports = {1 : (42,-8,0), 2 : (41.23556,-8.67806,0), 3 : (39.5, -8.0, 0), 4: (38.77944,-9.13611,0)} # {runway_id: position-> (x, y, z)}
 
     def update_aircraft_position(self, aircraft_id, position):
         self.aircraft_positions[aircraft_id] = position
@@ -74,7 +74,6 @@ class AirTrafficControlAgent(Agent):
         self.environment = environment
 
 
-
     async def setup(self):
         # Define a behavior to perceive and interact with the environment
         class EnvironmentInteraction(CyclicBehaviour):
@@ -98,14 +97,17 @@ class AirTrafficControlAgent(Agent):
             async def run(self):
                 msg = await self.receive()
                 if msg:
-                    position_match = re.search(r'\((-?\d+\.\d+), (-?\d+\.\d+), (-?\d+)\)', msg.body)
-                    aircraft_id = int(re.search(r'\d+', msg.body).group())
-                    print("aircraft_id: ", aircraft_id)
-                    if position_match:
-                        x, y, z = map(float, position_match.groups())
-                        self.agent.environment.aircraft_positions[aircraft_id] = (x, y, z)
-                    print(f"Hi! {msg.to} received message: {msg.body} from {msg.sender}\n")
-                    # Handle the message here, e.g., provide instructions to the aircraft
+                    if msg.body.startswith("Warning"):
+                        print(f"Hi! {msg.to} received message: {msg.body} from {msg.sender}.\nI will be attentive to any problems that may occur\n")
+                    else:
+                        position_match = re.search(r'\((-?\d+\.\d+), (-?\d+\.\d+), (-?\d+)\)', msg.body)
+                        aircraft_id = int(re.search(r'\d+', msg.body).group())
+                        print("aircraft_id: ", aircraft_id)
+                        if position_match:
+                            x, y, z = map(float, position_match.groups())
+                            self.agent.environment.aircraft_positions[aircraft_id] = (x, y, z)
+                        print(f"Hi! {msg.to} received message: {msg.body} from {msg.sender}\n")
+                        # Handle the message here, e.g., provide instructions to the aircraft
         
 
         # Add the behaviors to the agent
@@ -186,8 +188,14 @@ class AircraftAgent(Agent):
                             new_position = self.perform_avoidance_manoeuver(self.agent.aircraft_position, other_aircraft_position)
                             new_position_with_altitude = (new_position[0], new_position[1], new_position[2]- 500)
                             self.agent.environment.update_aircraft_position(self.agent.aircraft_id, new_position_with_altitude)
-                            self.change_route = True  # Informar ao agente de aeronave para gerar uma nova rota
-                            
+                            self.agent.change_route = True  # Informar ao agente de aeronave para gerar uma nova rota
+                
+                if self.agent.change_route:
+                    msg = Message(to="atc_agent@localhost")
+                    msg.set_metadata("performative", "informe")
+                    msg.body = f"Warning! Aircraft {self.agent.aircraft_id} is too close to another aircraft. Performing avoidance maneuver."
+                    self.agent.change_route = False
+                    await self.send(msg)
                             
 
 
@@ -209,8 +217,6 @@ class AircraftAgent(Agent):
 
                 return new_position
 
-                                
-            
 
 
         class AircraftInteractionRunway(CyclicBehaviour):
@@ -301,6 +307,14 @@ class AircraftAgent(Agent):
                 # Update the runway status in the environment (mark it as not available)
                 self.agent.environment.update_runway_status(self.agent.runway_id, 0)
 
+        class AnyProblem(CyclicBehaviour):
+            haveProblem = random.randint(0, 5)
+            if haveProblem == 5:
+                async def run(self):
+                    #print("Aircraft have a problem")
+                    # Create an ACL message to send data to the air traffic control agent   
+                    pass
+                
                 
         class MessageHandling(CyclicBehaviour):
             async def run(self):
@@ -322,6 +336,7 @@ class AircraftAgent(Agent):
         self.add_behaviour(AircraftInteractionRunway())
         self.add_behaviour(MessageHandling())
         self.add_behaviour(AircraftInteraction())
+        #self.add_behaviour(AnyProblem())
 
         
 
