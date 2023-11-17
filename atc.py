@@ -14,13 +14,14 @@ import re
 
 
 class Environment:
-    def __init__(self):
+    def __init__(self): 
         # Initialize environment variables, e.g., aircraft positions, weather, runways, etc.
-        self.aircraft_positions = {100 : (41.23556,-8.67806,0), 200 : (42,-8,0)} # {aircraft_id: position-> (x, y, z)}
+        self.aircraft_positions = {100 : (41.23556,-8.67806,0), 200 : (42.00000,-8.00000,0)} # {aircraft_id: position-> (x, y, z)}
         self.weather_conditions = {} # {weather_data}
-        self.runway_status = {1 : 1, 2 : 1} # {runway_id: status -> 0/1}
-        self.aeroports = {1 : (42,-8,0), 2 : (41.23556,-8.67806,0), 3 : (39.5, -8.0, 0), 4: (38.77944,-9.13611,0)} # {runway_id: position-> (x, y, z)}
-
+        self.runway_status = {1 : 1, 2 : 1, 3 : 1, 4:0 , 5: 1, 6:1} # {runway_id: status -> 0/1}
+        self.aeroports = {1 : (42.00000,-8.00000,0), 2 : (42.00000,-8.00000,0), 3 : (41.23556,-8.67806,0), 4 : (41.23556,-8.67806,0), 5 : (39.50000, -8.00000, 0) , 6: (38.77944,-9.13611,0)} # {runway_id: position-> (x, y, z)}
+        #usar sempre 5 casa decimais para funcionar com o pedido de runway
+        
     def update_aircraft_position(self, aircraft_id, position):
         self.aircraft_positions[aircraft_id] = position
         print(f"Aircraft {aircraft_id} is at position {position}")
@@ -45,14 +46,15 @@ class Environment:
 
     def get_runway_status(self, runway_id):
         if runway_id in self.runway_status:
+            print(f"Runway {runway_id} status: {self.runway_status[runway_id]}")
             return self.runway_status[runway_id]
         else:
             print(f"Runway {runway_id} not found.")
             return None
     
-    def get_runway_id(self):
+    def get_runway_id(self, airport):
         # Retrieve one of runway id from the environment with status 1
-        runway_ids = [runway_id for runway_id, status in self.runway_status.items() if status == 1]
+        runway_ids = [runway_id for runway_id, status in self.runway_status.items() if status == 1 and self.aeroports[runway_id] == airport]
         if runway_ids:
             return random.choice(runway_ids)
         else:
@@ -65,6 +67,15 @@ class Environment:
         else:
             print(f"Runway {runway_id} not found.")
             return None
+        
+    def get_airport_id(self, runway_id):
+        id_a = None
+        for airport_id, airport_position in self.aeroports.items():
+            if airport_id == runway_id:
+                id_a = airport_position
+        if id_a != None:
+            return id_a
+        return 
 
 
 
@@ -119,37 +130,43 @@ class RunwayManagerAgent(Agent):
     def __init__(self, jid, password, environment):
         super().__init__(jid, password)
         self.environment = environment
-        self.runway_id = self.environment.get_runway_id()
+
     
     async def setup(self):
         class RunwayAvailable(CyclicBehaviour):
             async def run(self):
-                #print("RunwayAvailableInteraction behavior is running")
                 msg = await self.receive()
                 if msg:
                     if msg.metadata["performative"] == "propose":
                         # Handle the runway request message
-                        print(f"Received runway request: {msg.body} from {msg.sender}")
-                        runwayIsAvailable = self.get_runway_status(self.agent.environment.get_runway_id())
-                        if runwayIsAvailable:
-                            # Create an ACL message to send data to the air traffic control agent   
+                        print(f"Received runway request: {msg.body} from {msg.sender}")    
+                        coordinates_match = re.search(r'\((-?\d+\.\d+), (-?\d+\.\d+), (-?\d+)\)', msg.body)
+                        coordinates = tuple(map(float, coordinates_match.groups()))
+                        requested_runway_id = self.agent.environment.get_runway_id(coordinates)
+                        runway_is_available = self.get_runway_status(requested_runway_id)
+                        if runway_is_available == 1:
+                            # Create an ACL message to send data to the air traffic control agent
+                            airport_id = self.agent.environment.get_airport_id(requested_runway_id)  # Assuming a method to get the airport ID
                             msg = Message(to=str(msg.sender))
                             msg.set_metadata("performative", "inform")
-                            msg.body = f"Runway {self.agent.runway_id} is available."
+                            msg.body = f"Runway {requested_runway_id} at Airport {airport_id} is available."
+                            # Include the airport ID in the message
+                            msg.body += f"\nAirport ID: {airport_id}"
                             # Send the message
                             await self.send(msg)
                         else:
                             msg = Message(to=str(msg.sender))
                             msg.set_metadata("performative", "inform")
-                            msg.body = f"Runway {self.agent.runway_id} is not available."
+                            msg.body = f"Runway {requested_runway_id} is not available."
                             # Send the message
                             await self.send(msg)
-                    
+
             def get_runway_status(self, runway_id):
                 # Retrieve runway status from the environment
                 status = self.agent.environment.get_runway_status(runway_id)
                 return status
-            
+
+                    
         
         self.add_behaviour(RunwayAvailable())
         
@@ -236,7 +253,7 @@ class AircraftAgent(Agent):
                     if not self.agent.reached_destination:
                         msg = Message(to="runway_agent@localhost")
                         msg.set_metadata("performative", "propose")
-                        msg.body = f"Some runway available?"
+                        msg.body = f"Some runway available for aeroport {self.agent.destination}?"
                         
                         await self.send(msg)
                     
@@ -347,7 +364,7 @@ async def main():
     atc_agent = AirTrafficControlAgent("atc_agent@localhost", "1234", atc_environment)
     
     aircraft_agent1 = AircraftAgent("aircraft_agent1@localhost", "1234", atc_environment, 100, 1)
-    aircraft_agent2 = AircraftAgent("aircraft_agent2@localhost", "1234", atc_environment, 200, 2)
+    aircraft_agent2 = AircraftAgent("aircraft_agent2@localhost", "1234", atc_environment, 200, 3)
     runway_agent = RunwayManagerAgent("runway_agent@localhost", "1234", atc_environment)
 
     await atc_agent.start()
