@@ -113,7 +113,6 @@ class AirTrafficControlAgent(Agent):
                     else:
                         position_match = re.search(r'\((-?\d+\.\d+), (-?\d+\.\d+), (-?\d+)\)', msg.body)
                         aircraft_id = int(re.search(r'\d+', msg.body).group())
-                        print("aircraft_id: ", aircraft_id)
                         if position_match:
                             x, y, z = map(float, position_match.groups())
                             self.agent.environment.aircraft_positions[aircraft_id] = (x, y, z)
@@ -150,8 +149,6 @@ class RunwayManagerAgent(Agent):
                             msg = Message(to=str(msg.sender))
                             msg.set_metadata("performative", "inform")
                             msg.body = f"Runway {requested_runway_id} at Airport {airport_id} is available."
-                            # Include the airport ID in the message
-                            msg.body += f"\nAirport ID: {airport_id}"
                             # Send the message
                             await self.send(msg)
                         else:
