@@ -8,6 +8,7 @@ import math
 import re
 from airportDatabase import AirportDatabase
 
+
 class AircraftAgent(Agent):
     def __init__(self, jid, password, environment, aircraft_id, runway_id):
         super().__init__(jid, password)
@@ -19,37 +20,47 @@ class AircraftAgent(Agent):
         self.change_route = False
         self.aircraft_position = self.environment.get_aircraft_position(self.aircraft_id)
         self.destination = self.environment.get_airport_coord(self.runway_id)
+        self.landed = False
+        self.problem = False
+
         
     async def setup(self):
         # Define a behavior to interact with the environment and air traffic control
+        
+        
         class AircraftInteraction(CyclicBehaviour):
             async def run(self):
-                await asyncio.sleep(2)
-                distance_to_other_aircraft = 1000000
-
-                for other_aircraft_id in self.agent.environment.aircraft_positions:
-                    if other_aircraft_id != self.agent.aircraft_id:
-                        other_aircraft_position = self.agent.environment.get_aircraft_position(other_aircraft_id)
-                        distance_to_other_aircraft = geodesic(
-                            (self.agent.aircraft_position[0], self.agent.aircraft_position[1]),
-                            (other_aircraft_position[0], other_aircraft_position[1])
-                        ).kilometers
-                        print("distance_to_other_aircraft: ", distance_to_other_aircraft)
-
-                        if distance_to_other_aircraft < 50:  # Defina um limite de proximidade adequado
-                            print(f"Aircraft {self.agent.aircraft_id} is too close to Aircraft {other_aircraft_id}. Performing avoidance maneuver.")
-                            new_position = self.perform_avoidance_manoeuver(self.agent.aircraft_position, other_aircraft_position)
-                            new_position_with_altitude = (new_position[0], new_position[1], new_position[2]- 500)
-                            self.agent.environment.update_aircraft_position(self.agent.aircraft_id, new_position_with_altitude)
-                            self.agent.change_route = True  # Informar ao agente de aeronave para gerar uma nova rota
                 
-                if self.agent.change_route:
-                    msg = Message(to="atc_agent@localhost")
-                    msg.set_metadata("performative", "informe")
-                    msg.body = f"Warning! Aircraft {self.agent.aircraft_id} is too close to another aircraft. Performing avoidance maneuver."
-                    self.agent.change_route = False
-                    await self.send(msg)
-                            
+                if not self.agent.landed:
+                    #await self.agent.new_route_event.wait()
+                
+                    await asyncio.sleep(2)
+                    distance_to_other_aircraft = 1000000
+
+                    for other_aircraft_id in self.agent.environment.aircraft_positions:
+                        if other_aircraft_id != self.agent.aircraft_id:
+                            other_aircraft_position = self.agent.environment.get_aircraft_position(other_aircraft_id)
+                            distance_to_other_aircraft = geodesic(
+                                (self.agent.aircraft_position[0], self.agent.aircraft_position[1]),
+                                (other_aircraft_position[0], other_aircraft_position[1])
+                            ).kilometers
+                            #print("distance_to_other_aircraft: ", distance_to_other_aircraft)
+
+                            if distance_to_other_aircraft < 50 and other_aircraft_position[2] != 0:  # Defina um limite de proximidade adequado
+                                print(f"Aircraft {self.agent.aircraft_id} is too close to Aircraft {other_aircraft_id}. Performing avoidance maneuver.")
+                                new_position = self.perform_avoidance_manoeuver(self.agent.aircraft_position, other_aircraft_position)
+                                new_position_with_altitude = (new_position[0], new_position[1], new_position[2]- 500)
+                                self.agent.environment.update_aircraft_position(self.agent.aircraft_id, new_position_with_altitude)
+                                self.agent.change_route = True  # Informar ao agente de aeronave para gerar uma nova rota
+
+
+                    if self.agent.change_route:
+                        msg = Message(to="atc_agent@localhost")
+                        msg.set_metadata("performative", "informe")
+                        msg.body = f"Warning! Aircraft {self.agent.aircraft_id} is too close to another aircraft. Performing avoidance maneuver."
+                        self.agent.change_route = False
+                        await self.send(msg)
+                                
 
 
             def perform_avoidance_manoeuver(self, current_position, other_aircraft_position):
@@ -74,44 +85,46 @@ class AircraftAgent(Agent):
 
         class AircraftInteractionRunway(CyclicBehaviour):
             async def run(self):
-                await asyncio.sleep(2)
-                #print("AircraftInteraction behavior is running")
-                # Perceive environment data
-                self.agent.aircraft_position = self.get_aircraft_position(self.agent.aircraft_id)
                 
-                new_position = self.move_towards(self.agent.aircraft_position, self.agent.destination, 1000000, 100)
-                
-                distance_to_destination = geodesic((new_position[0], new_position[1]), (self.agent.destination[0], self.agent.destination[1])).meters
-                
-                airport_db = AirportDatabase()
-                
-                airport_name = airport_db.get_name(self.agent.destination)
-                
-                if distance_to_destination <= 6000 :
-                    #request runway availability
-                    if not self.agent.reached_destination:
-                        msg = Message(to="runway_agent@localhost")
-                        msg.set_metadata("performative", "propose")
-                        msg.body = f"Some runway available for aeroport {airport_name} : {self.agent.destination}?"
+                if not self.agent.landed:
+                    #await self.agent.new_route_event.wait()
+                    
+                    await asyncio.sleep(2)
+                    #print(self.agent.problem)
+                    #print("AircraftInteraction behavior is running")
+                    # Perceive environment data
+                    self.agent.aircraft_position = self.get_aircraft_position(self.agent.aircraft_id)
+                    
+                    new_position = self.move_towards(self.agent.aircraft_position, self.agent.destination, 1000000, 100)
+                    
+                    distance_to_destination = geodesic((new_position[0], new_position[1]), (self.agent.destination[0], self.agent.destination[1])).meters
+                    
+                    airport_db = AirportDatabase()
+                    
+                    airport_name = airport_db.get_name(self.agent.destination)
+                    
+                    if distance_to_destination <= 6000 :
+                        #request runway availability
+                        if not self.agent.reached_destination:
+                            msg = Message(to="runway_agent@localhost")
+                            msg.set_metadata("performative", "propose")
+                            msg.body = f"Some runway available for aeroport {airport_name} : {self.agent.destination}?"
+                            
+                            await self.send(msg)
+                            
+                            
                         
-                        await self.send(msg)
-                    
-                    
-                if not self.agent.reached_destination:
+                    if not self.agent.reached_destination:
 
-                    self.agent.environment.update_aircraft_position(self.agent.aircraft_id, new_position)  
+                        self.agent.environment.update_aircraft_position(self.agent.aircraft_id, new_position)  
 
-                    await self.send_instruction_to_atc(self.agent.aircraft_position, distance_to_destination)
-                else:
-                    await self.land_aircraft()
-                    new_position
-                    print(self.agent.environment.runway_status)
-                    await self.send_instruction_to_atc(self.agent.aircraft_position, 0)
+                        await self.send_instruction_to_atc(self.agent.aircraft_position, distance_to_destination)
+                    else:
+                        await self.land_aircraft()
+                        print(self.agent.environment.runway_status)
+                        await self.send_instruction_to_atc(self.agent.aircraft_position, 0)
 
-                    await self.agent.new_route_event.wait()
-
-
-                    self.agent.new_route_event.clear()
+                        self.agent.landed = True   
                 
 
                     
@@ -146,7 +159,8 @@ class AircraftAgent(Agent):
             
 
             async def send_instruction_to_atc(self, position,distance):
-                # Create an ACL message to send data to the air traffic control agent   
+                # Create an ACL message to send data to the air traffic control agent
+                
                 msg = Message(to="atc_agent@localhost")  # Replace with the correct ATC agent JID
                 msg.set_metadata("performative", "inform")
                 msg.body = f"Aircraft {self.agent.aircraft_id} at position {position} requesting instructions.\nDistance to destination: {round(distance)} meters."
@@ -166,12 +180,15 @@ class AircraftAgent(Agent):
                 self.agent.environment.update_runway_status(self.agent.runway_id, 0)
 
         class AnyProblem(CyclicBehaviour):
-            haveProblem = random.randint(0, 5)
-            if haveProblem == 5:
-                async def run(self):
-                    #print("Aircraft have a problem")
-                    # Create an ACL message to send data to the air traffic control agent   
-                    pass
+            async def run(self):
+                if not self.agent.landed:
+                    await asyncio.sleep(3)
+                    have_problem = random.randint(0, 25)
+                    if have_problem == 5:
+                        #print("Aircraft have a problem")
+                        # Create an ACL message to send data to the air traffic control agent   
+                        self.agent.problem = True
+
                 
                 
         class MessageHandling(CyclicBehaviour):
@@ -188,10 +205,12 @@ class AircraftAgent(Agent):
 
                         self.agent.new_route_event.set()
 
-                    print(f"Hi! {msg.to} received message: {msg.body} from {msg.sender}\n")
+                    #print(f"Hi! {msg.to} received message: {msg.body} from {msg.sender}\n")
+
+        
 
         # Add the behavior to the agent
         self.add_behaviour(AircraftInteractionRunway())
         self.add_behaviour(MessageHandling())
         self.add_behaviour(AircraftInteraction())
-        #self.add_behaviour(AnyProblem())
+        self.add_behaviour(AnyProblem())

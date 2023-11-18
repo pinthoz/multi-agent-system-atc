@@ -1,3 +1,4 @@
+from spade.template import Template
 from spade.agent import Agent
 from spade.behaviour import CyclicBehaviour
 from spade.message import Message
@@ -16,7 +17,7 @@ class RunwayManagerAgent(Agent):
                 airport_db = AirportDatabase()
                 msg = await self.receive()
                 if msg:
-                    if msg.metadata["performative"] == "propose":
+                    if template.match(msg):
                         # Handle the runway request message
                         print(f"Received runway request: {msg.body} from {msg.sender}")    
                         coordinates_match = re.search(r'\((-?\d+\.\d+), (-?\d+\.\d+), (-?\d+)\)', msg.body)
@@ -45,6 +46,8 @@ class RunwayManagerAgent(Agent):
                 status = self.agent.environment.get_runway_status(runway_id)
                 return status
 
-                    
+           
+        template = Template()
+        template.set_metadata("performative", "propose")     
         
         self.add_behaviour(RunwayAvailable())
