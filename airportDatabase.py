@@ -11,3 +11,6 @@ class AirportDatabase:
 
     def get_name(self, coordinates):
         return self.airports.get(coordinates)
+    
+    def get_coor(self, index):
+        return list(self.airports)[index]

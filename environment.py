@@ -11,6 +11,7 @@ class Environment:
             (38.78003, -9.13495): "good",
             (37.02036, -7.96829): "good"
         } # {weather_data}
+        self.runways_in_airports = {(41.72512,-7.46632,0): [1,2], (41.23697,-8.67069,0): [3,4], (39.84483,-7.44015, 0): [5], (38.78003, -9.13495,0): [6], (37.02036,-7.96829,0): [7]}
         self.runway_status = {1 : 1, 2 : 0, 3 : 1, 4:1 , 5: 1, 6:1, 7:0} # {runway_id: status -> 0/1}
         self.aeroports = {1 : (41.72512, -7.46632,0), 2 : (41.72512, -7.46632,0), 3 : (41.23697, -8.67069,0), 4 : (41.23697, -8.67069,0), 5 : (39.84483, -7.44015, 0) , 6: (38.78003, -9.13495,0), 7:(37.02036, -7.96829)} # {runway_id: position-> (x, y, z)}
         #usar sempre 5 casa decimais para funcionar com o pedido de runway
@@ -53,6 +54,11 @@ class Environment:
         else:
             print("No runway available.")
             return None
+
+    def get_new_runway(self, airport):
+        runway_ids = self.runways_in_airports[airport]
+        if runway_ids:
+            return random.choice(runway_ids)
         
     def get_airport_coord(self,runway_id):
         if runway_id in self.aeroports:

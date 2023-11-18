@@ -56,11 +56,31 @@ class AircraftAgent(Agent):
 
                     if self.agent.change_route:
                         msg = Message(to="atc_agent@localhost")
-                        msg.set_metadata("performative", "informe")
+                        msg.set_metadata("performative", "inform")
                         msg.body = f"Warning! Aircraft {self.agent.aircraft_id} is too close to another aircraft. Performing avoidance maneuver."
                         self.agent.change_route = False
                         await self.send(msg)
-                                
+
+                else:
+                    self.agent.environment.update_aircraft_position(self.agent.aircraft_id, self.agent.destination)
+                    airport_db = AirportDatabase()
+                    old_runway = self.agent.runway_id
+                    index = random.randint(0, 4)
+                    new_airport = airport_db.get_coor(index)
+                    print('-----------------------------------')
+                    print("NEW AIRPORT " +  str(new_airport))
+                    print('-----------------------------------')
+                    runway = self.agent.environment.get_new_runway(new_airport)
+                    print (runway)
+                    print('-----------------------------------')
+                    self.agent.runway_id = runway
+                    self.agent.destination = new_airport
+                    self.agent.landed = False
+                    await asyncio.sleep(5)
+                    print(f"{new_airport} + {airport_db.get_name(new_airport)}")
+                    self.agent.environment.update_runway_status(old_runway, 1)
+                    
+
 
 
             def perform_avoidance_manoeuver(self, current_position, other_aircraft_position):
