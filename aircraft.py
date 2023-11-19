@@ -22,6 +22,7 @@ class AircraftAgent(Agent):
         self.destination = self.environment.get_airport_coord(self.runway_id)
         self.landed = False
         self.problem = False
+        self.distance_travelled = 0
 
         
     async def setup(self):
@@ -195,7 +196,9 @@ class AircraftAgent(Agent):
                     current_position[1] + ratio * (destination_position[1] - current_position[1]),
                     9000 
                 )
-
+                
+                self.agent.distance_travelled += geodesic((current_position[0], current_position[1]), (new_position[0], new_position[1])).meters
+                print(f"Distance travelled by aircraft {self.agent.aircraft_id}: {round(self.agent.distance_travelled)} meters.")
                 return new_position
             
 
@@ -241,10 +244,6 @@ class AircraftAgent(Agent):
                         self.agent.runway_id = runway_id
                         self.agent.reached_destination = True
                         
-                    elif "new route started" in msg.body:
-
-                        self.agent.new_route_event.set()
-
                     #print(f"Hi! {msg.to} received message: {msg.body} from {msg.sender}\n")
                     
         class SendMessageAirport(CyclicBehaviour):
