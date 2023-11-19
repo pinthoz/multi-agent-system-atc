@@ -27,7 +27,6 @@ class AircraftAgent(Agent):
     async def setup(self):
         # Define a behavior to interact with the environment and air traffic control
         
-        
         class AircraftInteraction(CyclicBehaviour):
             async def run(self):
                 
@@ -76,7 +75,28 @@ class AircraftAgent(Agent):
                     self.agent.runway_id = runway
                     self.agent.destination = new_airport
                     self.agent.landed = False
+                    
+                    for other_aircraft_id in self.agent.environment.aircraft_positions:
+                        if other_aircraft_id != self.agent.aircraft_id:
+                            msg = Message(to=f"aircraft_agent{str(other_aircraft_id)[0]}@localhost")  # Replace with the correct aircraft agent JID
+                            msg.set_metadata("performative", "query")
+                            msg.body = f"Query: Are you heading to the destination {self.agent.destination}?"
+                            msg.set_metadata("reply-to", str(self.agent.jid))  # Configura o campo "reply-to" com o JID do remetente (AircraftAgent)
+                            await self.send(msg)
+                            self.agent.environment.update_request_coord(self.agent.aircraft_id)
+                            
+                            response = await self.receive(timeout=10) 
+                            if response and "aircraft_agent" in str(response.sender) and response.metadata["performative"] == "inform":
+                                print("-----------------------------------")
+                                print(f"Aircraft {self.agent.aircraft_id} received a response from {response.sender}: {response.body}")
+                                if str(response.body) == "Yes":
+                                    print("Waiting...")
+                                    await asyncio.sleep(5)
+                                    print("End of waiting...")
+
+                            
                     await asyncio.sleep(5)
+                        
                     print(f"{new_airport} + {airport_db.get_name(new_airport)}")
                     self.agent.environment.update_runway_status(old_runway, 1)
                     
@@ -100,6 +120,7 @@ class AircraftAgent(Agent):
                 )
 
                 return new_position
+            
 
 
 
@@ -216,7 +237,6 @@ class AircraftAgent(Agent):
                 msg = await self.receive()
                 if msg:
                     if "is available" in msg.body:
-
                         runway_id = int(re.search(r'\d+', msg.body).group())
                         self.agent.runway_id = runway_id
                         self.agent.reached_destination = True
@@ -226,11 +246,30 @@ class AircraftAgent(Agent):
                         self.agent.new_route_event.set()
 
                     #print(f"Hi! {msg.to} received message: {msg.body} from {msg.sender}\n")
+                    
+        class SendMessageAirport(CyclicBehaviour):
+            async def run(self):
+                if (self.agent.environment.has_1_value(self.agent.environment.request_coord)):
+                    msg = await self.receive(timeout=10)
+                    if msg and "aircraft_agent" in str(msg.sender) and msg.metadata["performative"] == "query":
+                        print(f"Recebeu mensagem de {msg.sender} com conteudo {msg.body}")
 
-        
+                        # Envia uma resposta ao remetente original usando o JID do campo "reply-to"
+                        response = Message(to=msg.metadata["reply-to"])
+                        response.set_metadata("performative", "inform")
+                        cord = re.search(r'\((-?\d+\.\d+), (-?\d+\.\d+), (-?\d+)\)', str(msg.body))
+                        if (self.agent.destination == (float(cord.group(1)), float(cord.group(2)), int(cord.group(3)))): 
+                            response.body = "Yes"
+                        else:
+                            response.body = "No"
+                        await self.send(response)
+                        
+                        print(f"Aircraft {self.agent.aircraft_id} sent a response to {msg.sender}: {response.body}")
+                    self.agent.environment.update_all_request_coord_to_0()
 
         # Add the behavior to the agent
         self.add_behaviour(AircraftInteractionRunway())
         self.add_behaviour(MessageHandling())
         self.add_behaviour(AircraftInteraction())
         self.add_behaviour(AnyProblem())
+        self.add_behaviour(SendMessageAirport())

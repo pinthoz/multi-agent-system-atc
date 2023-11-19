@@ -14,7 +14,8 @@ class Environment:
         self.runways_in_airports = {(41.72512,-7.46632,0): [1,2], (41.23697,-8.67069,0): [3,4], (39.84483,-7.44015, 0): [5], (38.78003, -9.13495,0): [6], (37.02036,-7.96829,0): [7]}
         self.runway_status = {1 : 1, 2 : 0, 3 : 1, 4:1 , 5: 1, 6:1, 7:0} # {runway_id: status -> 0/1}
         self.aeroports = {1 : (41.72512, -7.46632,0), 2 : (41.72512, -7.46632,0), 3 : (41.23697, -8.67069,0), 4 : (41.23697, -8.67069,0), 5 : (39.84483, -7.44015, 0) , 6: (38.78003, -9.13495,0), 7:(37.02036, -7.96829)} # {runway_id: position-> (x, y, z)}
-        #usar sempre 5 casa decimais para funcionar com o pedido de runway
+        
+        self.request_coord = {100 : 0, 200 : 0 , 300 : 0, 400: 0}
         
     def update_aircraft_position(self, aircraft_id, position):
         self.aircraft_positions[aircraft_id] = position
@@ -75,3 +76,14 @@ class Environment:
         if id_a != None:
             return id_a
         return
+    
+    def update_request_coord(self, aircraft_id):
+        self.request_coord[aircraft_id] = 1
+        
+        
+    def has_1_value(self, request):
+        return any(value == 1 for value in request.values())
+    
+    def update_all_request_coord_to_0(self):
+        for aircraft_id in self.request_coord:
+            self.request_coord[aircraft_id] = 0
