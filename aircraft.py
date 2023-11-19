@@ -23,6 +23,7 @@ class AircraftAgent(Agent):
         self.landed = False
         self.problem = False
         self.distance_travelled = 0
+        self.request_land = False
 
         
     async def setup(self):
@@ -162,6 +163,7 @@ class AircraftAgent(Agent):
 
                         await self.send_instruction_to_atc(self.agent.aircraft_position, distance_to_destination)
                     else:
+                        
                         await self.land_aircraft()
                         print(self.agent.environment.runway_status)
                         await self.send_instruction_to_atc(self.agent.aircraft_position, 0)
@@ -265,10 +267,55 @@ class AircraftAgent(Agent):
                         
                         print(f"Aircraft {self.agent.aircraft_id} sent a response to {msg.sender}: {response.body}")
                     self.agent.environment.update_all_request_coord_to_0()
+                    
+        
+        class Emergency(CyclicBehaviour):
+            async def run(self):
+                if self.agent.problem:
+                    airport_db = AirportDatabase()
+                    msg = Message(to="atc_agent@localhost")
+                    msg.set_metadata("performative", "inform")
+                    msg.body = f"Warning! Aircraft {self.agent.aircraft_id} have a problem."
+                    await self.send(msg)
+                    
+                    for other_aircraft_id in self.agent.environment.aircraft_positions:
+                        if other_aircraft_id != self.agent.aircraft_id:
+                            request = Message(to=f"aircraft_agent{str(other_aircraft_id)[0]}@localhost")
+                            request.set_metadata("performative", "emergency")
+                            closest_airport = self.agent.environment.find_closest_airport(self.agent.aircraft_position)
+                            request.body = f"Emergency: I need to land in {airport_db.get_name(closest_airport)} : {closest_airport}?"
+                            await self.send(request)
+                            self.agent.request_land = True
+                            self.agent.destination = closest_airport
+                    self.agent.problem = False
+                    
+        class Emergency_Airport(CyclicBehaviour):
+            async def run(self):
+                if self.agent.request_land:
+                    msg = await self.receive(timeout=10)
+                    if msg and "aircraft_agent" in str(msg.sender) and msg.metadata["performative"] == "emergency":
+                        print(f"Recebeu mensagem de {msg.sender} com conteudo {msg.body}")
 
+                        # Envia uma resposta ao remetente original usando o JID do campo "reply-to"
+                        response = Message(to=msg.metadata["reply-to"])
+                        response.set_metadata("performative", "inform")
+                        cord = re.search(r'\((-?\d+\.\d+), (-?\d+\.\d+), (-?\d+)\)', str(msg.body))
+                        if (self.agent.destination == (float(cord.group(1)), float(cord.group(2)), int(cord.group(3)))): 
+                            response.body = "I wait for you"
+                            #lógica para ele esperar o outro avião pousar
+                        else:
+                            response.body = "No"
+                        await self.send(response)
+                        
+                        print(f"Aircraft {self.agent.aircraft_id} sent a response to {msg.sender}: {response.body}")
+                    self.agent.request_land = False
+                    
+                    
         # Add the behavior to the agent
         self.add_behaviour(AircraftInteractionRunway())
         self.add_behaviour(MessageHandling())
         self.add_behaviour(AircraftInteraction())
         self.add_behaviour(AnyProblem())
         self.add_behaviour(SendMessageAirport())
+        self.add_behaviour(Emergency())
+        self.add_behaviour(Emergency_Airport())

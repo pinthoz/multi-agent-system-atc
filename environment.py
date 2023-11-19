@@ -1,4 +1,5 @@
 import random
+from geopy.distance import geodesic
 
 class Environment:
     def __init__(self): 
@@ -87,3 +88,17 @@ class Environment:
     def update_all_request_coord_to_0(self):
         for aircraft_id in self.request_coord:
             self.request_coord[aircraft_id] = 0
+
+    def find_closest_airport(self, current_position):
+
+        closest_airport_id = None
+        min_distance = float('inf')
+
+        for airport_position, runway in self.runways_in_airports.items():
+            distance = geodesic(current_position[:2], airport_position[:2]).meters
+
+            if distance < min_distance:
+                min_distance = distance
+                closest_airport_id = airport_position
+
+        return closest_airport_id
