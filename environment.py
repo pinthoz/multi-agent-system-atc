@@ -6,15 +6,15 @@ class Environment:
         # Initialize environment variables, e.g., aircraft positions, weather, runways, etc.
         self.aircraft_positions = {100 : (41.23697, -8.67069,0), 200 : (41.72512, -7.46632,0) , 300 : (39.84483, -7.44015, 0), 400: (38.78003, -9.13495,0)} # {aircraft_id: position-> (x, y, z)}
         self.weather_conditions = {
-            (41.72512, -7.46632): "good",
-            (41.23697, -8.67069): "good",
-            (39.84483, -7.44015): "good",
-            (38.78003, -9.13495): "good",
-            (37.02036, -7.96829): "good"
+            (41.72512, -7.46632, 0): "good",
+            (41.23697, -8.67069, 0): "good",
+            (39.84483, -7.44015, 0): "good",
+            (38.78003, -9.13495, 0): "good",
+            (37.02036, -7.96829, 0): "good"
         } # {weather_data}
-        self.runways_in_airports = {(41.72512,-7.46632,0): [1,2], (41.23697,-8.67069,0): [3,4], (39.84483,-7.44015, 0): [5], (38.78003, -9.13495,0): [6], (37.02036,-7.96829,0): [7]}
+        self.runways_in_airports = {(41.72512,-7.46632,0): [1], (41.23697,-8.67069,0): [2,3], (39.84483,-7.44015, 0): [4], (38.78003, -9.13495,0): [5,6], (37.02036,-7.96829,0): [7]}
         self.runway_status = {1 : 1, 2 : 0, 3 : 1, 4:1 , 5: 1, 6:1, 7:0} # {runway_id: status -> 0/1}
-        self.aeroports = {1 : (41.72512, -7.46632,0), 2 : (41.72512, -7.46632,0), 3 : (41.23697, -8.67069,0), 4 : (41.23697, -8.67069,0), 5 : (39.84483, -7.44015, 0) , 6: (38.78003, -9.13495,0), 7:(37.02036, -7.96829)} # {runway_id: position-> (x, y, z)}
+        self.aeroports = {1 : (41.72512, -7.46632,0), 2 : (41.23697,-8.67069,0), 3 : (41.23697, -8.67069,0), 4 : (39.84483,-7.44015, 0), 5 : (38.78003, -9.13495,0) , 6: (38.78003, -9.13495,0), 7:(37.02036, -7.96829)} # {runway_id: position-> (x, y, z)}
         
         self.request_coord = {100 : 0, 200 : 0 , 300 : 0, 400: 0}
         
@@ -37,8 +37,8 @@ class Environment:
             print(f"Aircraft {aircraft_id} not found.")
             return None
 
-    def get_weather_data(self):
-        return self.weather_conditions
+    def get_weather_data(self, airport):
+        return self.weather_conditions[airport]
 
     def get_runway_status(self, runway_id):
         if runway_id in self.runway_status:
@@ -97,7 +97,7 @@ class Environment:
         for airport_position, runway in self.runways_in_airports.items():
             distance = geodesic(current_position[:2], airport_position[:2]).meters
 
-            if distance < min_distance:
+            if distance < min_distance and distance> 0:
                 min_distance = distance
                 closest_airport_id = airport_position
 

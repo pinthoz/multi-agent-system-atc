@@ -16,7 +16,6 @@ class AircraftAgent(Agent):
         self.aircraft_id = aircraft_id
         self.runway_id = runway_id
         self.reached_destination = False
-        self.new_route_event = asyncio.Event()
         self.change_route = False
         self.aircraft_position = self.environment.get_aircraft_position(self.aircraft_id)
         self.destination = self.environment.get_airport_coord(self.runway_id)
@@ -77,6 +76,7 @@ class AircraftAgent(Agent):
                     self.agent.runway_id = runway
                     self.agent.destination = new_airport
                     self.agent.landed = False
+                    self.agent.distance_travelled = 0
                     
                     for other_aircraft_id in self.agent.environment.aircraft_positions:
                         if other_aircraft_id != self.agent.aircraft_id:
@@ -149,11 +149,20 @@ class AircraftAgent(Agent):
                     if distance_to_destination <= 6000 :
                         #request runway availability
                         if not self.agent.reached_destination:
-                            msg = Message(to="runway_agent@localhost")
-                            msg.set_metadata("performative", "propose")
-                            msg.body = f"Some runway available for aeroport {airport_name} : {self.agent.destination}?"
                             
-                            await self.send(msg)
+                            if self.agent.environment.get_weather_data(self.agent.destination) == "bad":
+                                new_destination = self.agent.environment.find_closest_airport(self.agent.destination)
+                                msg = Message(to="runway_agent@localhost")
+                                msg.set_metadata("performative", "propose")
+                                msg.body = f"Some runway available for aeroport {airport_db.get_name(new_destination)} : {new_destination}?"
+                                await self.send(msg)
+                                self.agent.destination = new_destination
+                            else:
+                                msg = Message(to="runway_agent@localhost")
+                                msg.set_metadata("performative", "propose")
+                                msg.body = f"Some runway available for aeroport {airport_name} : {self.agent.destination}?"
+                                
+                                await self.send(msg)
                             
                             
                         
@@ -273,21 +282,28 @@ class AircraftAgent(Agent):
             async def run(self):
                 if self.agent.problem:
                     airport_db = AirportDatabase()
-                    msg = Message(to="atc_agent@localhost")
-                    msg.set_metadata("performative", "inform")
-                    msg.body = f"Warning! Aircraft {self.agent.aircraft_id} have a problem."
-                    await self.send(msg)
+                    request_airport = Message(to=f"atc_agent@localhost")
+                    request_airport.set_metadata("performative", "request")
+                    request_airport.body = "Emergency! Find me the closest airport"
+                    await self.send(request_airport) 
+                    airport_request= await self.receive(timeout=10)
+                    if airport_request and airport_request.metadata["performative"] == "inform":
+                        print(f"Recebeu mensagem de {airport_request.sender} com conteudo {airport_request.body}")
+                        cord = re.search(r'\((-?\d+\.\d+), (-?\d+\.\d+), (-?\d+)\)', str(airport_request.body))
+                        closest_airport = (float(cord.group(1)), float(cord.group(2)), int(cord.group(3)))
                     
-                    for other_aircraft_id in self.agent.environment.aircraft_positions:
-                        if other_aircraft_id != self.agent.aircraft_id:
-                            request = Message(to=f"aircraft_agent{str(other_aircraft_id)[0]}@localhost")
-                            request.set_metadata("performative", "emergency")
-                            closest_airport = self.agent.environment.find_closest_airport(self.agent.aircraft_position)
-                            request.body = f"Emergency: I need to land in {airport_db.get_name(closest_airport)} : {closest_airport}?"
-                            await self.send(request)
-                            self.agent.request_land = True
-                            self.agent.destination = closest_airport
-                    self.agent.problem = False
+                        for other_aircraft_id in self.agent.environment.aircraft_positions:
+                            if other_aircraft_id != self.agent.aircraft_id:
+                                request = Message(to=f"aircraft_agent{str(other_aircraft_id)[0]}@localhost")
+                                request.set_metadata("performative", "emergency")
+                                #closest_airport = self.agent.environment.find_closest_airport(self.agent.aircraft_position)
+                                request.body = f"Emergency: I need to land in {airport_db.get_name(closest_airport)} : {closest_airport}! Please, let me land!"
+                                print(f"I need to land in {airport_db.get_name(closest_airport)} : {closest_airport}")
+                                await self.send(request)
+                                
+                        self.agent.request_land = True
+                        self.agent.destination = closest_airport
+                        self.agent.problem = False
                     
         class Emergency_Airport(CyclicBehaviour):
             async def run(self):
@@ -310,6 +326,14 @@ class AircraftAgent(Agent):
                         print(f"Aircraft {self.agent.aircraft_id} sent a response to {msg.sender}: {response.body}")
                     self.agent.request_land = False
                     
+        class ReceiveEmergencyMessage(CyclicBehaviour):
+            async def run(self):
+                msg = await self.receive()
+                if msg and msg.body.startswith("Emergency: I need to land"):
+                    print(f"{str(msg.to)} i receive your message")
+                    
+
+
                     
         # Add the behavior to the agent
         self.add_behaviour(AircraftInteractionRunway())
@@ -319,3 +343,4 @@ class AircraftAgent(Agent):
         self.add_behaviour(SendMessageAirport())
         self.add_behaviour(Emergency())
         self.add_behaviour(Emergency_Airport())
+        self.add_behaviour(ReceiveEmergencyMessage())

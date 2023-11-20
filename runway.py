@@ -15,7 +15,7 @@ class RunwayManagerAgent(Agent):
         class RunwayAvailable(CyclicBehaviour):
             async def run(self):
                 airport_db = AirportDatabase()
-                msg = await self.receive()
+                msg = await self.receive(timeout=5)
                 if msg:
                     if template.match(msg):
                         # Handle the runway request message
