@@ -1,4 +1,4 @@
-
+# Classe com os nomes dos aeroportos
 class AirportDatabase:
     def __init__(self):
         self.airports = {
@@ -9,8 +9,10 @@ class AirportDatabase:
             (37.02036, -7.96829, 0): "Aeroporto de Faro"
         }
 
+    # Retorna o nome dos aeroportos
     def get_name(self, coordinates):
         return self.airports.get(coordinates)
     
+    # Retorna as coordenas do aeroporto
     def get_coor(self, index):
         return list(self.airports)[index]

@@ -6,6 +6,9 @@ from airportDatabase import AirportDatabase
 import re
 
 class RunwayManagerAgent(Agent):
+    '''
+    Classe que define o agente que controla as pistas de aterragem
+    '''
     def __init__(self, jid, password, environment):
         super().__init__(jid, password)
         self.environment = environment
@@ -13,36 +16,37 @@ class RunwayManagerAgent(Agent):
     
     async def setup(self):
         class RunwayAvailable(CyclicBehaviour):
+            '''
+            Processa as mensagens enviadas pelos aviões.
+            Verifica se tem pista de aterragem disponível.
+            '''
             async def run(self):
                 airport_db = AirportDatabase()
                 msg = await self.receive(timeout=5)
                 if msg:
                     if template.match(msg):
-                        # Handle the runway request message
+                        # Recebe as coordenadas do aeroporto e verifica se tem uma pista disponível
                         print(f"Received runway request: {msg.body} from {msg.sender}")    
                         coordinates_match = re.search(r'\((-?\d+\.\d+), (-?\d+\.\d+), (-?\d+)\)', msg.body)
                         coordinates = tuple(map(float, coordinates_match.groups()))
                         requested_runway_id = self.agent.environment.get_runway_id(coordinates)
                         runway_is_available = self.get_runway_status(requested_runway_id)
                         if runway_is_available == 1:
-                            # Create an ACL message to send data to the air traffic control agent
-                            airport_id = self.agent.environment.get_airport_id(requested_runway_id)  # Assuming a method to get the airport ID
+                            # Se tem uma pista disponível, envia uma mensagem ao avião com o ID da pista e o nome do aeroporto
+                            airport_id = self.agent.environment.get_airport_id(requested_runway_id)  
                             airport_name = airport_db.get_name(airport_id)
                             msg = Message(to=str(msg.sender))
                             msg.set_metadata("performative", "inform")
                             msg.body = f"Runway {requested_runway_id} at Airport {airport_name} is available."
-                            # Include the airport ID in the message
-                            # Send the message
                             await self.send(msg)
                         else:
                             msg = Message(to=str(msg.sender))
                             msg.set_metadata("performative", "inform")
                             msg.body = f"Runway {requested_runway_id} is not available."
-                            # Send the message
                             await self.send(msg)
 
             def get_runway_status(self, runway_id):
-                # Retrieve runway status from the environment
+                # Verifica o estado da pista de aterragem
                 status = self.agent.environment.get_runway_status(runway_id)
                 return status
 
